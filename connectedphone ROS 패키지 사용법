@@ -1,0 +1,20 @@
+***실행 명령어  
+roslaunch open_manipulator_controller open_manipulator_controller.launch
+roslaunch open_manipulator_connectedphone connectedphone.launch
+roslaunch open_manipulator_connectedphone key_command.launch
+
+***실행 명령어 ( 시뮬레이션 가제보 )
+roslaunch open_manipulator_gazebo open_manipulator_gazebo.launch  
+roslaunch open_manipulator_controller open_manipulator_controller.launch use_platform:=false
+roslaunch open_manipulator_connectedphone connectedphone.launch use_platform:=false
+roslaunch open_manipulator_connectedphone key_command.launch
+
+
+echo로 메뉴얼 선택 주는 방법 
+pub command_Key std_msgs/Int8 2
+
+***설치 과정
+1. OpenManipulator 설치
+http://emanual.robotis.com/docs/en/platform/openmanipulator_x/ros_setup/#install-ubuntu-on-pc
+2. open_manipulator_connectedphone git 설치 
+
