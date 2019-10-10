@@ -80,6 +80,7 @@ class trackingAction(smach.State):
         self.last_detect_time = rospy.get_rostime()
         self.jointStates = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 	self.kinematicsStates = [0.0, 0.0, 0.0]
+        self.facedata = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 
     def kinematicsPoseCallback(self, msg):
         self.kinematicsStates[0] = msg.pose.position.x
@@ -94,8 +95,12 @@ class trackingAction(smach.State):
             #print 'boundingBoxe {} {} '.format(i, pose)
 
     def collect(self, msg):
-        rospy.logwarn('camera data %s', msg.data )
-        #id,CenterX,CenterY,Width,Height,EulerY,EulerZ,LeftEyeOpen,RightEyeOpen,Smile
+        #face tracking data
+        #rospy.logwarn('camera data %s', msg.data )
+        self.facedata = [int (i) for i in msg.data.split(",")]
+        rospy.logwarn('id %d,CX %d,CY %d,Width %d,Height %d,EulerY %d,EulerZ %d,LeftEyeOpen %d,RightEyeOpen %d,Smile %d ', \
+                  self.facedata[0], self.facedata[1], self.facedata[2], self.facedata[3], self.facedata[4], self.facedata[5],\
+                  self.facedata[6], self.facedata[7], self.facedata[8], self.facedata[9]) 
 
     def commandKeyCallback(self, msg):
         #print '0. Start\n1. Stop 1\n2. Release Phone\n' 
