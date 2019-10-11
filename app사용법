@@ -1,35 +1,56 @@
-apk 폴더를 보며 android_pubCommnadVoice.apk, android_pubfacetracking.apk, facetracking.apk 파일 세 개가 있습니다.
+apk 폴더를 보며 아래 두개 폴더가 있음. 
 
-open manipulator에 거치해서 Camera App을 실행시킬 폰에는 android_pubfacetracking.apk, facetracking.apk 설치 
-손에들고 조작에 사용할 폰은 android_pubCommnadVoice.apk 을 설치  
+ 1.apk_손에 들고 조정할 폰에 설치 
+    - android_pubCommnadVoice.apk  ( pc ros로 데이터 보내주는 apk )
+ 2.apk_op에 거치하는 폰에 설치 
+    - android_pubfacetracking.apk  ( pc ros로 데이터 보내주는 apk, 항상 켜져있고 홈키 눌러 백그라운드로 실행시키고 있어야함)
+    아래 세개 app은 원하는 씬에 따라 하나씩 선택해서 실행시키면 됨. 
+    - facetracker.apk  ( 카메라 프리뷰 화면이 나타남. android_pubfacetracking.apk 로 인식된 얼굴 좌표 보내줌. ) 
+    - FaceTrackerVideo.apk(동영상 Play 화면이 나타남. preview는 되지 않지만 카메라가 실제 동작하고 있어서 android_pubfacetracking.apk 로 인식된 얼굴 좌표 보내줌. ) 
+    - facetrackingweb.apk ( Web Play 화면이 나타남. preview는 되지 않지만 카메라가 실제 동작하고 있어서 android_pubfacetracking.apk 로 인식된 얼굴 좌표 보내줌. ) 
+
+APK 실행히 주의 사항 
+1. facetracker.apk, FaceTrackerVideo.apk, facetrackingweb.apk 세개는 카메라 권한이 있어야 실행됨. 
+   설정 -> 일반 -> 앱 및 알림 -> 앱권한 -> 카메라 화면가서 해당 앱들이 권한이 부여되었는지 확인 필요. 안되있으면 해당 화면서 권한 부여 
+2. FaceTrackerVideo.apk은 저장소 권한도이 있어야 실행됨. 
+   설정 -> 일반 -> 앱 및 알림 -> 앱권한 -> 저장소 화면가서 권한이 부여되었는지 확인 필요. 안되있으면 해당 화면서 권한 부여 
+3. FaceTrackerVideo.apk 은 로컬에 저장된 동영상을 Play 함.  내부 메모리의  DCIM/Camera/ 폴더위치의  1.mp4 이름의 동영상을 실행시킴. 
+
+페이스 트레킹 앱들 ( facetracker.apk, FaceTrackerVideo.apk, facetrackingweb.apk ) 과  android_pubfacetracking.apk 는  
+브로드 캐스트로 android_pubsubSample.apk 으로 디텍트한 정보를 보내줌. 
 
 
-facetracking.apk 은 구글 공식 얼굴 트레킹 코드이고 여기서 브로드 캐스트로 android_pubsubSample.apk 으로 디텍트한 정보를 보내줌. 
-https://github.com/googlesamples/android-vision/tree/master/visionSamples/FaceTracker  원본 code 
-
-android_pubCommnadVoice.apk 은 ros android 쪽을 수정한 예제로  facetracking.apk 에서 브로드 캐스트한 디텍드 정보를 PC로 ros publish 해줌. 
-android_pubCommnadVoice.apk open manipulator를 조작하기 위한 APP 임 .  
-https://github.com/AuTURBO/ros-app-tb3-voiceorder   -> 원본 code 
+얼굴인식 기본 코드 
+https://github.com/googlesamples/android-vision/tree/master/visionSamples/FaceTracker 
+PC ROS 로 퍼블리쉬 하는 기본 코드  
+https://github.com/AuTURBO/ros-app-tb3-voiceorder  
 
 
-
-사용법은 아래 순서를 따르세요. 
+실행 순서 
 
 1. PC와 휴대폰을 동일 공유기에 연결
 2. PC쪽 roscore IP 설정 
-3. 로봇팔에 거치할 휴대폰에 두개 apk (android_pubfacetracking.apk 과 facetracking.apk) 설치
-4. android_pubfacetracking.apk APK 실행, 실행시 2번의 roscore IP 입력 
-   홈키를 눌러 해당 apk를 background에서 실행 되게 함. 
-5. facetracking.apk 실행 
-   그러면 얼굴인식 data가 facetracking.apk  ->  android_pubsubSample.apk 거쳐 PC서 보여짐. 
-6. PC 서 rqt로 로스 topic을 보시면 휴대폰(android_pubsubSample.apk)에서 아래 3개의 topic을 publish 하고 있음. 
+3. 로봇팔에 거치할 휴대폰의 경우
+   3-1. 4개 apk 설치 (android_pubfacetracking.apk, Facetracker.apk, FaceTrackerVideo.apk, facetrackingweb.apk)
+     - 위에도 말했듯이 FaceTrackerVideo.apk 의 경우 메뉴에 들어가서 저장소 권한 부여와  DCIM/Camera/1.mp4 라는 play 할 동영상이 폰에 들어있어야 함.  
+   3-2. android_pubfacetracking.apk APK 실행, 실행시 PC의 roscore IP 입력
+   3-3. 홈키를 눌러 해당 android_pubfacetracking.apk를 background에서 실행 되게 함.
+   3-4. 이후 원하는 facetracker.apk ,FaceTrackerVideo.apk, facetrackingweb.apk 어플 중 하나 실행
+   3-5. PC rqt로 확인하면 face detection 한 정보가 보임. 
+4. 손으로 들고 로봇팔을 조작하기 위한 휴대폰의 경우
+   4-1. 1개 apk 설치 (android_pubCommnadVoice.apk ) 
+   4-2. 원하는 UI 버튼 눌러 컨트롤 
+   4-3. 음성 버튼 누르면 동작하고 그에 따른 응답도 말함.  음석이 인식되는 조건은 아래와 같음  
+        음성인식의 경우 단어0에 있는 단어중 하나가 포함된 말을 하면 0번 버튼을 누른것 처럼 (시작) 모드로 동작   
+        음성인식의 경우 단어1에 있는 단어중 하나가 포함된 말을 하면 1번 버튼을 누른것 처럼 (정지) 모드로 동작   
+        음성인식의 경우 단어2에 있는 단어중 하나가 포함된 말을 하면 2번 버튼을 누른것 처럼 (폰 내려 놓는) 모드로 동작하게 되어있습니다. 
 
-7. 두번째 조작과 보이스 커맨드를 위해 사용할 폰에 android_pubCommnadVoice.apk 설치  
-   위와 동일한 방식으로 실행시키고 해당 앱의 UI를 이용하여 로봇팔 control 
+        단어0 {"시작", "움직여","찍어", "스타트" ,"들어"} ;
+        단어1 { "정지" , "멈춤", "멈춰", "그만", "잠깐", "스탑" } ;
+        단어2 {"내려", "놓으세요", "놔둬"} ;
 
 
-
-////detecting 정보 
+////App과 연동되어 PC rqt 상에서 생기는 토픽틀 
 
    /android/publish_voice_string/recognizer/output   -> 음성 인식한 data ( 한글이라 rqt 에서 읽을 수 없음. ) 
    /command_Key   -> Control에 사용되는 data ,  0. 시작, 1. 정지, 2. 폰 내려 놓기                      
@@ -54,15 +75,8 @@ Smile, 웃고 있을 확률
 외에 landmark 도 data가 있지만 이건 data가 heavy 하고 안쓸것 같아 보내지 않았습니다. 
 위에서 필요한 데이타 골라 사용하면 될듯 합니다 ㅎ 
 
-8. android_pubsubSample.apk 앱은 다른 폰에 깔아서 Control용으로 쓸수 수 있는데 
-음성인식의 경우 외부망에 연결이 되어있어야 동작을 하므로 라우터가 인터넷에 연결이 되어있어야함. 
-음성인식의 경우 단어0에 있는 단어중 하나가 포함된 말을 하면 0번 버튼을 누른것 처럼 (시작) 모드로 동작   
-음성인식의 경우 단어1에 있는 단어중 하나가 포함된 말을 하면 1번 버튼을 누른것 처럼 (정지) 모드로 동작   
-음성인식의 경우 단어2에 있는 단어중 하나가 포함된 말을 하면 2번 버튼을 누른것 처럼 (폰 내려 놓는) 모드로 동작하게 되어있습니다. 
+8. 음성인식의 경우 클라우스 TTS/STT는 아니지만 외부망에 연결이 되어있어야 동작을 하므로 라우터가 인터넷에 연결이 되어있어야함. 
 
-  단어0 {"시작", "움직여","찍어", "스타트" ,"들어"} ;
-  단어1 { "정지" , "멈춤", "멈춰", "그만", "잠깐", "스탑" } ;
-  단어2 {"내려", "놓으세요", "놔둬"} ;
    
 
    
