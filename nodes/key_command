@@ -37,7 +37,7 @@ from std_msgs.msg import Int8
 from std_msgs.msg import String
 
 msg = """
-0. Start \n1. Stop\n2. Release Phone\n
+0. Start \n1. Stop\n2. Release Phone\n3. PanoramaShot Start\n4. Init Action\n5. Smile Action\n
 """
 
 e = """
@@ -83,6 +83,26 @@ if __name__=="__main__":
                 print msg
                 print 'Release Phone\n'
                 pub.publish("2")
+            elif key == '3' :
+                print msg
+                print 'Panorama Shot\n'
+                pub.publish("3")
+            elif key == '4' :
+                print msg
+                print 'Init Action\n'
+                pub.publish("4")
+            elif key == '5' :
+                print msg
+                print 'Smile Action\n'
+                pub.publish("5")
+            elif key == '8' :
+                print 'Program Finish\n'
+                pub.publish("8")
+                pub.publish("8")
+                pub.publish("8")
+                pub.publish("8")
+                pub.publish("8")
+                break
             else:
                 if (key == '\x03'):
                     break

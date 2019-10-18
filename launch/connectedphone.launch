@@ -1,15 +1,30 @@
 <launch>
   <arg name="use_robot_name"         default="open_manipulator"/>
   <arg name="planning_group"         default="arm" />
-  <arg name="detection_type"         default="yolo" />
-  <!--There is two detection_type 1.yolo, 2.yolo_jsk--> 
+  <arg name="use_state_publisher" default="true"/>
+  <arg name="open_rviz"           default="false"/>
+  <arg name="use_platform"           default="true"/>
 
   <node name="connectedphone_state_machine" pkg="open_manipulator_connectedphone" type="connectedphone_state_machine" output="screen">
     <param name="robot_name"  value="$(arg use_robot_name)"/>
     <param name="planning_group"  value="$(arg planning_group)"/>
-    <param name="detection_type"  value="$(arg detection_type)"/>
+    <param name="use_platform"  value="$(arg use_platform)"/>
   </node>
 
-  <!--<node name="key_command" pkg="open_manipulator_connectedphone" type="key_command" output="screen"/>-->
+  <group if="$(arg use_state_publisher)">
+    <param name="robot_description"
+          command="$(find xacro)/xacro --inorder '$(find open_manipulator_description)/urdf/open_manipulator.urdf.xacro'"/>
+
+    <node pkg="joint_state_publisher" type="joint_state_publisher" name="joint_state_publisher">
+      <rosparam param="source_list" subst_value="true">["$(arg use_robot_name)/joint_states"]</rosparam>
+    </node>
+
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher"/>
+  </group>
+
+
+  <group if="$(arg open_rviz)">
+      <node pkg="rviz" type="rviz" name="rviz" required="true" args="-d $(find open_manipulator_connectedphone)/rviz/phone.rviz"/>
+  </group>
 
 </launch>

@@ -40,10 +40,6 @@ class waitCommand(smach.State):
         #rospy.logwarn('1commandKeyCallback %d', msg.data) 
         if msg.data == "0" :
             self.mode = 0
-        elif msg.data == "1" :   
-            self.mode = 1
-        elif msg.data == "2" :
-            self.mode = 2
         else :
             pass
 
@@ -59,7 +55,7 @@ class waitCommand(smach.State):
 class trackingAction(smach.State):
     def __init__(self):
         smach.State.__init__(self, outcomes=['succeeded', 'aborted'],
-                                    input_keys=['input_planning_group'])
+                                    input_keys=['input_planning_group','input_motionfile_file'])
 	self.object_pose_sub = rospy.Subscriber('/facedetectdataset', String, self.collect)
         #self.cupboundingBox = BoundingBox()
 
@@ -67,20 +63,29 @@ class trackingAction(smach.State):
         self.set_joint_position = rospy.ServiceProxy('/open_manipulator/goal_joint_space_path', SetJointPosition)
         # this is for IV Kinemetics Control 
         self.set_kinematics_position = rospy.ServiceProxy('/open_manipulator/goal_task_space_path_position_only', SetKinematicsPose)
+        self.set_kinematics_from_present_position= rospy.ServiceProxy('/open_manipulator/goal_task_space_path_from_present_position_only', SetKinematicsPose)
         # this is for Joint Control from Current Position  
-	#self.set_joint_position_from_present = rospy.ServiceProxy('/open_manipulator/goal_joint_space_path_from_present', SetJointPosition)
+	self.set_joint_position_from_present = rospy.ServiceProxy('/open_manipulator/goal_joint_space_path_from_present', SetJointPosition)
 
         # to read current joint value
         self.open_manipulator_joint_states_sub_ = rospy.Subscriber('/open_manipulator/joint_states', JointState, self.jointStatesCallback)
         # to read current IN kinemetics value
         self.open_manipulator_kinematics_pose_sub_ = rospy.Subscriber('/open_manipulator/gripper/kinematics_pose', KinematicsPose, self.kinematicsPoseCallback)
+        self.set_gripper_position = rospy.ServiceProxy('/open_manipulator/goal_tool_control', SetJointPosition)
 
         self.command_Key_sub = rospy.Subscriber('command_Key', String, self.commandKeyCallback)
         self.mode = 9
         self.last_detect_time = rospy.get_rostime()
-        self.jointStates = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.jointStates = [0.0, 0.0, 0.0, 0.0]
+        self.gripperStates = [0.0, 0.0]
 	self.kinematicsStates = [0.0, 0.0, 0.0]
         self.facedata = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        self.face_center_x = 320
+        self.face_center_y = 240
+        self.last_no_detect_time = rospy.get_rostime()
+        self.no_detect_count = 0
+        self.use_platform = rospy.get_param("~use_platform")
+        self.face_width = 0
 
     def kinematicsPoseCallback(self, msg):
         self.kinematicsStates[0] = msg.pose.position.x
@@ -89,18 +94,33 @@ class trackingAction(smach.State):
         #rospy.logwarn(' kinematicsPoseCallback %.2f , %.2f, %.2f  ', self.kinematicsStates[0], self.kinematicsStates[1], self.kinematicsStates[2] )
 
     def jointStatesCallback(self, msg):
-	#rospy.logwarn('jointStatesCallback %d ', len(msg.position) )
-        for i, pose in enumerate(msg.position):
-            self.jointStates[i] = pose
-            #print 'boundingBoxe {} {} '.format(i, pose)
+        if self.use_platform :
+            self.jointStates[0] = msg.position[0]
+            self.jointStates[1] = msg.position[1]
+            self.jointStates[2] = msg.position[2]
+            self.jointStates[3] = msg.position[3]
+        else :
+            self.gripperStates[0] = msg.position[0]
+            self.gripperStates[1] = msg.position[1]
+            self.jointStates[0] = msg.position[2]
+            self.jointStates[1] = msg.position[3]
+            self.jointStates[2] = msg.position[4]
+            self.jointStates[3] = msg.position[5]
 
     def collect(self, msg):
         #face tracking data
         #rospy.logwarn('camera data %s', msg.data )
         self.facedata = [int (i) for i in msg.data.split(",")]
-        rospy.logwarn('id %d,CX %d,CY %d,Width %d,Height %d,EulerY %d,EulerZ %d,LeftEyeOpen %d,RightEyeOpen %d,Smile %d ', \
+        self.face_center_x = self.facedata[1]
+        self.face_center_y = self.facedata[2]
+        self.face_width = self.facedata[3]
+        self.last_detect_time = rospy.get_rostime()
+        #print "face_center_x: %d"%self.face_center_x
+        #print "face_center_x: %d"%self.face_center_x
+
+        '''rospy.logwarn('id %d,CX %d,CY %d,Width %d,Height %d,EulerY %d,EulerZ %d,LeftEyeOpen %d,RightEyeOpen %d,Smile %d ', \
                   self.facedata[0], self.facedata[1], self.facedata[2], self.facedata[3], self.facedata[4], self.facedata[5],\
-                  self.facedata[6], self.facedata[7], self.facedata[8], self.facedata[9]) 
+                  self.facedata[6], self.facedata[7], self.facedata[8], self.facedata[9]) '''
 
     def commandKeyCallback(self, msg):
         #print '0. Start\n1. Stop 1\n2. Release Phone\n' 
@@ -113,44 +133,279 @@ class trackingAction(smach.State):
             self.mode = 2
         elif msg.data == "3" :
             self.mode = 3
-        elif msg.data == "7" :
-            self.mode = 7
+        elif msg.data == "4" :
+            self.mode = 4
+        elif msg.data == "5" :
+            self.mode = 5
+        elif msg.data == "8" :
+            self.mode = 8
         else :
             pass
 
-    def panoramaShot(self):
-        print 'panoramaShot\n' 
+    def initAction(self,userdata):
 
-    def execute(self, userdata):
-        self.mode = 9
-        #example joint control 
-        '''try: 
+        try: 
 	    joint_position = JointPosition()
 	    planning_group = userdata.input_planning_group
 	    joint_position.joint_name = ['joint1','joint2','joint3','joint4']
-            joint_position.position =  [0, 0.055, 0.046, 0]
-            path_time = 2
+            joint_position.position =  [0.0, -1.05, 0.35, 0.70]
+            path_time = 5
             resp1 = self.set_joint_position(planning_group,joint_position, path_time)
-	    #print 'resp1 {}'.format(resp1.is_planned) 
-	    rospy.sleep(2) 
+            #print 'resp1 {}'.format(resp1.is_planned) 
+            rospy.sleep(5) 
         except rospy.ServiceException, e:
             print "Service call failed: %s"%e
 
-        #example IV kinemetics control 
+        print 'init point\n' 
+
+    def smileAction(self,userdata):
+        print 'smileAction point\n' 
+        count = 0 
+        inputfile = userdata.input_motionfile_file
+	while 1:            
+            if count > ( len(inputfile) - 1 ):
+                break
+
+	    if count == 0 :
+                position_path_time = 2 
+                operating_time = 2
+            else :
+                #position_path_time = 0.2
+                #operating_time = 0.02
+                position_path_time = 1
+                operating_time = 0.02
+
+            try: 
+	        joint_position = JointPosition()
+	        planning_group = userdata.input_planning_group
+	        joint_position.joint_name = ['joint1','joint2','joint3','joint4']
+                joint_position.position =  [inputfile[count][0], inputfile[count][1], \
+                                            inputfile[count][2], inputfile[count][3]]
+                path_time = position_path_time
+                resp1 = self.set_joint_position(planning_group,joint_position, path_time)
+	        #print 'resp1 {}'.format(resp1.is_planned) 
+	        #rospy.sleep(position_path_time) 
+            except rospy.ServiceException, e:
+                print "Service call failed: %s"%e
+            count = count + 1
+            rospy.sleep(operating_time)
+
+        print 'smileAction finish\n'
+
+
+    def winkAction(self,userdata):
+        print 'panoramaShot init point\n' 
+
+    def panoramaShot(self,userdata):
+        print 'panoramaShot init point\n' 
+
         try: 
+	    joint_position = JointPosition()
 	    planning_group = userdata.input_planning_group
+	    joint_position.joint_name = ['joint1','joint2','joint3','joint4']
+            joint_position.position =  [-1.57, -1.049, 0.354, 0.715]
+            path_time = 5
+            resp1 = self.set_joint_position(planning_group,joint_position, path_time)
+            #print 'resp1 {}'.format(resp1.is_planned) 
+            rospy.sleep(5) 
+        except rospy.ServiceException, e:
+            print "Service call failed: %s"%e
+
+        try: 
+	    joint_position = JointPosition()
+	    planning_group = userdata.input_planning_group
+	    joint_position.joint_name = ['joint1','joint2','joint3','joint4']
+            joint_position.position =  [-3.14+0.03, -0.700, -0.249, 0.500]
+            path_time = 5
+            resp1 = self.set_joint_position(planning_group,joint_position, path_time)
+            #print 'resp1 {}'.format(resp1.is_planned) 
+            rospy.sleep(5) 
+        except rospy.ServiceException, e:
+            print "Service call failed: %s"%e
+
+        rospy.sleep(3)
+
+        print 'panoramaShot start\n' 
+        try:
+	    joint_position = JointPosition()
+	    planning_group = userdata.input_planning_group
+	    joint_position.joint_name = ['joint1','joint2','joint3','joint4']
+            joint_position.position =  [3.14*2-0.06, 0, 0, 0]
+            path_time = 20
+            resp1 = self.set_joint_position_from_present(planning_group,joint_position, path_time)
+            rospy.sleep(21)  
+	    #print 'resp1 {}'.format(resp1.is_planned) 
+        except rospy.ServiceException, e:
+            print "Service call failed: %s"%e
+
+        print 'panoramaShot end\n' 
+
+        rospy.sleep(3)
+
+        print 'set init position for face tracking \n' 
+        try: 
+	    joint_position = JointPosition()
+	    planning_group = userdata.input_planning_group
+	    joint_position.joint_name = ['joint1','joint2','joint3','joint4']
+            joint_position.position =  [0.0, -1.05, 0.35, 0.70]
+            path_time = 5
+            resp1 = self.set_joint_position(planning_group,joint_position, path_time)
+            #print 'resp1 {}'.format(resp1.is_planned) 
+            rospy.sleep(5) 
+        except rospy.ServiceException, e:
+            print "Service call failed: %s"%e
+
+    def facetrackingActionByJoint(self,userdata):
+  
+        #center_x = 112 #320
+        center_x = 182 #320
+        center_y = 158 #240
+
+        x_diff = (center_x - self.face_center_x)
+        y_diff = (center_y - self.face_center_y)
+        #move_x = (x_diff*1000/320)*0.1/1000
+        #move_y = (y_diff*1000/320)*-0.05/1000
+        move_x = (x_diff*1000/320)*0.3/1000
+        move_y = (y_diff*1000/320)*-0.15/1000
+        #rospy.logwarn('C_XY %.3f,%.3f , XY_Diff %.3f,%.3f  move_xy %.3f,%.3f)', self.face_center_x ,self.face_center_y , \
+                       #x_diff, y_diff, move_x, move_y)
+	object_detect_duration = rospy.get_rostime().to_sec() - self.last_detect_time.to_sec()
+	#rospy.logwarn("duration %.2f",object_detect_duration ) 	
+	
+        #check last face detected time 
+        if object_detect_duration > 1 :
+	    rospy.logwarn(" no face.. %d ", self.no_detect_count)
+            self.last_no_detect_time = rospy.get_rostime()
+            self.no_detect_count = self.no_detect_count + 1
+            if self.no_detect_count > 30 :
+                rospy.logwarn(" no_detect_count too long..........................set init!!!!!!!!!!!!!!!!!")
+
+                print 'set init position for face tracking \n' 
+                try: 
+	            joint_position = JointPosition()
+	            planning_group = userdata.input_planning_group
+	            joint_position.joint_name = ['joint1','joint2','joint3','joint4']
+                    joint_position.position =  [0.0, -1.05, 0.35, 0.70]
+                    path_time = 5
+                    resp1 = self.set_joint_position(planning_group,joint_position, path_time)
+                    #print 'resp1 {}'.format(resp1.is_planned) 
+                    rospy.sleep(5) 
+                except rospy.ServiceException, e:
+                    print "Service call failed: %s"%e
+
+	    rospy.sleep(0.1) 	
+            return ;
+        
+        self.no_detect_count = 0 
+
+        center_range_x = 50
+        center_range_y = 25
+        #center range set 
+        if abs(x_diff) > center_range_x or abs(y_diff) > center_range_y :
+            #operating range set _ x range (-90 degree ~ 90 degree) y range (-45 degree ~ 45 degree)
+            if (self.jointStates[0] > 1.57  and move_x > 0) or (self.jointStates[0] < -1.57 and move_x < 0 ) :
+                move_x = 0 
+                #rospy.logwarn("set  joint0 state %.3f , move_x  %.3f",self.jointStates[0], move_x) 
+            if (self.jointStates[3] > 1.57  and move_y > 0) or (self.jointStates[3] < 0 and move_y < 0 ) :
+                move_y = 0 
+                #rospy.logwarn("set  joint3 state %.3f , move_y  %.3f",self.jointStates[3], move_y) 
+
+            #tracking action
+            try:
+	        joint_position = JointPosition()
+	        planning_group = userdata.input_planning_group
+	        joint_position.joint_name = ['joint1','joint2','joint3','joint4']
+                joint_position.position =  [move_x, 0, 0, move_y]
+                resp1 = self.set_joint_position_from_present(planning_group,joint_position, 0.5)
+                rospy.sleep(0.2)  
+	        print 'resp2 {}'.format(resp1.is_planned) 
+            except rospy.ServiceException, e:
+                print "Service call failed: %s"%e
+
+        #depth calculation by width
+        #200 ~ 75
+        '''center_z = 100
+        center_range_z = 25
+        z_diff = (center_z - self.face_width)
+        cur_x = self.kinematicsStates[0]
+        cur_y = self.kinematicsStates[1]
+        cur_z = self.kinematicsStates[2]
+
+        rospy.logwarn('self.face_width %.2f , z_diff %.2f', self.face_width, z_diff)  
+
+        if abs(z_diff) > center_range_z :
+            if z_diff < 0 :  # detect big face, So need Backward action  
+                z_diff = -1  #-1 cm
+            if z_diff > 0 :  # detect small face, So need forward action  
+                z_diff = 1   #1 cm   
+            angle = math.atan(cur_y/cur_x)
+            dist_x = math.cos(angle)*z_diff/100
+            dist_y = math.sin(angle)*z_diff/100
+            rospy.logwarn('cur_xyz %.2f, %.2f, %.2f __ dist_xy %.2f, %.2f  ', cur_x, cur_y, cur_z, dist_x, dist_y)           
+        
+            try:
+                planning_group = userdata.input_planning_group
+                end_effector_name = "gripper";
+                kinematics_pose = KinematicsPose()
+                kinematics_pose.pose.position.x = dist_x
+                kinematics_pose.pose.position.y = dist_y
+                kinematics_pose.pose.position.z = 0
+                #resp1 = self.set_kinematics_position(planning_group, end_effector_name, kinematics_pose, 0.5)
+                resp1 = self.set_kinematics_from_present_position(planning_group, end_effector_name, kinematics_pose, 0.5)
+    	        print 'kinemetics resp1 {}'.format(resp1.is_planned)
+    	        rospy.sleep(0.5)
+            except rospy.ServiceException, e:
+               print "Service call failed: %s"%e'''
+
+    def facetrackingActionByIVKinemetics(self,userdata):
+        print 'facetrackingAction\n'
+
+        #check last face detected time 
+        if object_detect_duration > 1 :
+	    rospy.logwarn(" no face.. ")
+	    rospy.sleep(1) 	
+            return ;
+
+        try:
+            # center(absolute) : face_center = current_pose : kinematics_pose
+            #1) Comparison between screen center coordinates and tracking coordinates
+            center_x = 320
+            center_y = 240
+            differ_x = self.face_center_x - center_x
+            differ_y = self.face_center_y - center_y
+            move_ratio = 0.01
+            #print "face_center_x: %d"%self.face_center_x
+            #print "face_center_y: %d"%self.face_center_y
+            #print "center_x: %d"%center_x
+            #print "center_y: %d"%center_y
+
+            #2) 0.01% of the difference between x and y values is applied to the robot arm coordinates.
+            rospy.logwarn('position ( %d %d )( %d %d )', self.face_center_x , self.face_center_y ,differ_x, differ_y ) 
+            rospy.logwarn('position ............................( %.2f ,%.3f %.2f ) %.3f ', self.kinematicsStates[0],self.kinematicsStates[1],self.kinematicsStates[2],\
+                           self.kinematicsStates[1] + move_ratio * differ_x) 
+            planning_group = userdata.input_planning_group
             end_effector_name = "gripper";
             kinematics_pose = KinematicsPose()
             kinematics_pose.pose.position.x = self.kinematicsStates[0]
-            kinematics_pose.pose.position.y = self.kinematicsStates[1]
-            kinematics_pose.pose.position.z = self.kinematicsStates[2] + 0.02
+            kinematics_pose.pose.position.y = self.kinematicsStates[1] + move_ratio * differ_x
+            #kinematics_pose.pose.position.z = self.kinematicsStates[2] + 0.02 + move_ratio * differ_y
+            kinematics_pose.pose.position.z = self.kinematicsStates[2]
+            print "position.x: %f"%kinematics_pose.pose.position.x
+            print "pose.position.y: %f"%kinematics_pose.pose.position.y
+            print "pose.position: %f"%kinematics_pose.pose.position.z
 
             path_time = 1
             resp1 = self.set_kinematics_position(planning_group, end_effector_name, kinematics_pose, path_time)
-	    print 'kinemetics resp1 {}'.format(resp1.is_planned) 
-	    rospy.sleep(1) 
+    	    print 'kinemetics resp1 {}'.format(resp1.is_planned)
+    	    rospy.sleep(1)
         except rospy.ServiceException, e:
-            print "Service call failed: %s"%e '''
+            print "Service call failed: %s"%e
+
+
+    def execute(self, userdata):
+        rospy.sleep(3) 
+        self.mode = 9
+        #example joint control 
 
 	while 1:
 	    if self.mode == 2 :
@@ -158,47 +413,44 @@ class trackingAction(smach.State):
 	    elif self.mode == 1 :
 	        continue
 	    elif self.mode == 3 :
-                self.panoramaShot()
+                self.panoramaShot(userdata)
+                self.mode = 0
 	        continue
-	    elif self.mode == 7:
-                return 'aborted' 	        
+	    elif self.mode == 4 :
+                self.initAction(userdata)
+                self.mode = 1
+	        continue
+	    elif self.mode == 5 :
+                self.smileAction(userdata)
+                self.mode = 0
+	        continue
+	    elif self.mode == 8:
+                return 'aborted' 	
 
-            try: 
-	        joint_position = JointPosition()
-	        planning_group = userdata.input_planning_group
-	        joint_position.joint_name = ['joint1','joint2','joint3','joint4']
-                joint_position.position =  [0, 0.055, 0.046, 0]
-                path_time = 2
-                resp1 = self.set_joint_position(planning_group,joint_position, path_time)
-	        #print 'resp1 {}'.format(resp1.is_planned) 
-	        rospy.sleep(2) 
-            except rospy.ServiceException, e:
-                print "Service call failed: %s"%e
+            #self.facetrackingActionByIVKinemetics(userdata)
+            self.facetrackingActionByJoint(userdata)
 
-            try: 
-	        planning_group = userdata.input_planning_group
-	        joint_position.joint_name = ['joint1','joint2','joint3','joint4']
-                joint_position.position =  [0.2, 0.055, 0.07, 0]
-                path_time = 2
-                resp1 = self.set_joint_position(planning_group,joint_position, path_time)
-	        #print 'resp1 {}'.format(resp1.is_planned) 
-	        rospy.sleep(2) 
-            except rospy.ServiceException, e:
-                print "Service call failed: %s"%e
-     
 	    #rospy.sleep(1) 
             # tracking code 
         return 'succeeded'      
+
+def myhook():
+    #print "shutdown time!........................................................."
+    pass
 
 def main():
     rospy.init_node('pick_and_place_state_machine2')
     namespace = rospy.get_param("~robot_name")
     planning_group = rospy.get_param("~planning_group")
     pick_center = smach.StateMachine(outcomes=['succeeded','aborted','preempted','option0','option1','option2'])
-   
+    rospy.on_shutdown(myhook)
+
     rospack = rospkg.RosPack()
     rospack.list() 
     package_path = rospack.get_path('open_manipulator_connectedphone')
+
+    with open(package_path+'/cfg/output.txt') as data:
+        inputfile = [[float(i) for i in line.split(",")] for line in data.readlines()]
 
     with pick_center:
         pick_center.userdata.planning_group = planning_group
@@ -209,8 +461,9 @@ def main():
             request.path_time = 1.5
             return request
 
-        def joint_position_response_cb(userdata, response):
+        def joint_position_response_cb(userdataz, response):
             if response.is_planned == False:
+                rospy.sleep(1.5)
                 return 'aborted'
             else:
                 rospy.sleep(1.5)
@@ -231,9 +484,23 @@ def main():
                 rospy.sleep(2.0)
                 return 'succeeded'
 
-        ########### INITIAL STEP #################################################        
-        pick_center.userdata.init_position = [0.0, -1.05, 0.35, 0.70]
-        smach.StateMachine.add('ARM_INIT_POSITION',
+        ########### INITIAL STEP ################################################# 
+
+        pick_center.userdata.pick_first_position = [0.0, 0.041, -0.328, 1.55]
+        smach.StateMachine.add('INIT_FIRST_POSITION',
+                                ServiceState('/open_manipulator/goal_joint_space_path',
+                                             SetJointPosition,
+                                             request_cb=joint_position_request_cb,
+                                             response_cb=joint_position_response_cb,
+                                             input_keys=['input_planning_group',
+                                                         'input_position']),
+                                transitions={'succeeded':'INIT_SECOND_POSITION'},
+                                remapping={'input_planning_group':'planning_group',
+                                            'input_position':'pick_first_position'})
+
+        pick_center.userdata.pick_second_position = [0.0, 0.210, 0.032, 1.300]
+        #pick_center.userdata.pick_second_position = [0.0, 0.210, 0.032, 1.390]
+        smach.StateMachine.add('INIT_SECOND_POSITION',
                                 ServiceState('/open_manipulator/goal_joint_space_path',
                                              SetJointPosition,
                                              request_cb=joint_position_request_cb,
@@ -241,8 +508,9 @@ def main():
                                              input_keys=['input_planning_group',
                                                          'input_position']),
                                 transitions={'succeeded':'INIT_OPEN_GRIPPER'},
+                                #transitions={'succeeded':'succeeded'},
                                 remapping={'input_planning_group':'planning_group',
-                                            'input_position':'init_position'})
+                                            'input_position':'pick_second_position'})
 
         pick_center.userdata.open_gripper = [0.01]
         smach.StateMachine.add('INIT_OPEN_GRIPPER',
@@ -252,18 +520,29 @@ def main():
                                              response_cb=gripper_response_cb,
                                              input_keys=['input_planning_group',
                                                          'input_gripper']),
-                                transitions={'succeeded':'WAIT_COMMAND'},
+                                transitions={'succeeded':'INIT_THIRD_POSITION'},
                                 remapping={'input_planning_group':'planning_group',
                                            'input_gripper':'open_gripper'})
+       
+        pick_center.userdata.init_position = [0.0, -1.05, 0.35, 0.70]
+        smach.StateMachine.add('INIT_THIRD_POSITION',
+                                ServiceState('/open_manipulator/goal_joint_space_path',
+                                             SetJointPosition,
+                                             request_cb=joint_position_request_cb,
+                                             response_cb=joint_position_response_cb,
+                                             input_keys=['input_planning_group',
+                                                         'input_position']),
+                                transitions={'succeeded':'WAIT_COMMAND'},
+                                remapping={'input_planning_group':'planning_group',
+                                            'input_position':'init_position'})
 
         smach.StateMachine.add('WAIT_COMMAND', waitCommand(),
                                 transitions={'succeeded':'PICK_FIRST_POSITION',
                                              'aborted':'WAIT_COMMAND'})
 
-
         ########## PICKING PHONE STEP ##################################################
         #pick_center.userdata.pick_first_position = [0.0, 0.041, -0.328, 1.743]
-        pick_center.userdata.pick_first_position = [0.0, 0.041, -0.328, 1.55]
+        #pick_center.userdata.pick_first_position = [0.0, 0.041, -0.328, 1.55]
         smach.StateMachine.add('PICK_FIRST_POSITION',
                                 ServiceState('/open_manipulator/goal_joint_space_path',
                                              SetJointPosition,
@@ -310,14 +589,18 @@ def main():
                                              input_keys=['input_planning_group',
                                                          'input_position']),
                                 transitions={'succeeded':'TRACKING_ACTION'},
+                                #transitions={'succeeded':'succeeded'},
                                 remapping={'input_planning_group':'planning_group',
                                             'input_position':'pick_third_position'})
 
+
         ############# TRACKING STEP ###############################################
+        pick_center.userdata.motionfile = inputfile
         smach.StateMachine.add('TRACKING_ACTION', trackingAction(),
                                 transitions={'succeeded':'RELEASE_FIRST_POSITION',
                                              'aborted':'aborted'},
-                                remapping={'input_planning_group':'planning_group'})
+                                remapping={'input_planning_group':'planning_group',
+                                            'input_motionfile_file':'motionfile'})
 
         ############# RELEASE PHONE STEP ###############################################
         smach.StateMachine.add('RELEASE_FIRST_POSITION',
@@ -349,7 +632,8 @@ def main():
                                              response_cb=gripper_response_cb,
                                              input_keys=['input_planning_group',
                                                          'input_gripper']),
-                                transitions={'succeeded':'ARM_INIT_POSITION'},
+                                transitions={'succeeded':'INIT_THIRD_POSITION'},
+                                #transitions={'succeeded':'succeeded'},
                                 remapping={'input_planning_group':'planning_group',
                                            'input_gripper':'open_gripper'})
 
